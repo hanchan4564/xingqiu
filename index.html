@@ -61,6 +61,12 @@
     cursor:pointer;transition:background .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
   #zoomCtl button:active{background:rgba(80,130,220,.45)}
   #zoomCtl .zr{font-size:15px}
+  /* 横屏沉浸模式：地图全屏、面板收起，此按钮唤回面板 */
+  body.land-imm #quakePanel,body.land-imm #cityPanel{display:none}
+  #landToggle{display:none;position:fixed;z-index:11;right:12px;top:64px;padding:6px 12px;border-radius:10px;
+    font-family:inherit;font-size:9px;letter-spacing:.14em;color:var(--txt);cursor:pointer;
+    background:rgba(120,170,255,.14);border:1px solid rgba(120,190,255,.4)}
+  #landToggle:active{background:rgba(120,170,255,.34)}
 
   .panel{
     position:fixed;z-index:10;
@@ -145,14 +151,22 @@
   .quake.big .place{color:#ffdccc}
   .tag{font-size:8px;letter-spacing:.22em;color:#ffb46b;border:1px solid rgba(255,180,110,.45);
     border-radius:7px;padding:1.5px 7px;margin-left:7px;vertical-align:1.5px;white-space:nowrap}
-  .scale{display:inline-block;width:52px;height:5px;border-radius:5px;
+  /* 风色标尺：常驻地图角落，缩放/平移时也可对照 */
+  #windLegend{position:fixed;z-index:6;pointer-events:none;display:flex;flex-direction:column;gap:3px;
+    padding:6px 9px;border-radius:10px;background:rgba(9,14,28,.52);border:1px solid rgba(140,180,255,.16);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  #windLegend .wl-cap{font-size:8px;letter-spacing:.16em;color:rgba(147,166,201,.85);white-space:nowrap}
+  #windLegend .wl-bar{width:96px;height:5px;border-radius:5px;
     background:linear-gradient(90deg,#4fd8ff,#69b7ff,#b48cff,#e58cff,#ffd27d);
-    box-shadow:0 0 10px rgba(130,170,255,.4)}
-  .scTxt{font-size:8.5px;letter-spacing:.28em;color:rgba(147,166,201,.7)}
+    box-shadow:0 0 10px rgba(130,170,255,.35)}
+  #windLegend .wl-row{display:flex;justify-content:space-between;font-size:7.5px;
+    letter-spacing:.08em;color:rgba(147,166,201,.72)}
   .tabs{display:flex;gap:8px;padding:0 20px 9px}
   .tab{font-family:inherit;font-size:9.5px;letter-spacing:.2em;color:var(--dim);cursor:pointer;
     padding:5px 11px;border-radius:9px;border:1px solid rgba(140,180,255,.12);
-    background:rgba(120,170,255,.06);transition:all .25s}
+    background:rgba(120,170,255,.06);transition:all .25s;position:relative}
+  .tab.dot::after{content:'';position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;
+    background:#ff5d73;box-shadow:0 0 8px rgba(255,80,110,.95);animation:pulse 1.3s infinite}
   .tab.on{color:var(--txt);border-color:rgba(120,190,255,.42);background:rgba(120,170,255,.17)}
   .quake .mag.lv{font-size:8.5px;line-height:1.4;letter-spacing:.04em;text-align:center}
 
@@ -459,6 +473,7 @@
     .city .temp{font-size:16px}
     #statusbar{bottom:10px;left:12px;right:12px;height:34px;font-size:9px;letter-spacing:.12em}
     #statusbar .hide-s{display:none}
+    #landToggle{display:block}
     .panel h2{padding:11px 14px 4px}
     .psub{padding:0 14px 8px;font-size:8px;letter-spacing:.14em}
     #toast{top:64px;font-size:10px;padding:9px 16px}
@@ -540,10 +555,15 @@
   <button id="zout" title="缩小">－</button>
   <button id="zrst" class="zr" title="复位">⟳</button>
 </div>
+<div id="windLegend" aria-hidden="true">
+  <div class="wl-cap">风速色标 · m/s</div>
+  <div class="wl-bar"></div>
+  <div class="wl-row"><span>微风 0</span><span>强风 26+</span></div>
+</div>
+<button id="landToggle" type="button" aria-label="显示或收起数据面板">☰ 面板</button>
 <div id="statusbar" class="panel">
   <div class="grp">
-    <span class="chip"><span class="d" id="windDot"></span>风场 <b id="windState">连接中</b>
-      <span class="scale" aria-hidden="true"></span><span class="scTxt">微→强</span></span>
+    <span class="chip"><span class="d" id="windDot"></span>风场 <b id="windState">连接中</b></span>
     <span class="chip hide-s"><span class="d" id="quakeDot"></span>地震 <b id="quakeState">连接中</b></span>
     <span class="chip hide-m"><span class="d" id="weatherDot"></span>天气 <b id="weatherState">连接中</b></span>
     <span class="chip hide-m">昼夜线 <b id="sunState">—</b></span>
@@ -609,7 +629,7 @@
 <script>
 'use strict';
 /* 构建版本号：每次发布手动+1，用于内置浏览器的"自动换新"检测 */
-const BUILD = 'ep-2026.11.03-7';
+const BUILD = 'ep-2026.11.03-8';
 
 /* ---------- 安全区实测封顶 ----------
    部分 App 内置浏览器会虚报 env(safe-area-inset-*)，导致顶部出现大片空白。
@@ -747,14 +767,41 @@ function layout(){
     const y = Math.min(sb + Math.max(6, (availH + 40 - h) / 2), sc - h + 34);
     mapRect = {x:(W - w) / 2, y, w, h};
   } else if (isPhoneLand){
-    const w = Math.min(W - 505, (H - 96) * 2);
-    mapRect = {x:(W - w)/2 + 10, y:(H - w/2)/2 - 4, w, h:w/2};
+    if (landImm){   /* 沉浸模式：全屏地图，面板收起；顶让位标题栏、底让位状态栏 */
+      const availH = H - 60 - 46;
+      const h = Math.max(120, Math.min(availH, (W - 24) / 2));
+      const w = h * 2;
+      mapRect = {x:(W - w)/2, y:60 + Math.max(0, (availH - h) / 2), w, h};
+    } else {
+      const w = Math.min(W - 505, (H - 96) * 2);
+      mapRect = {x:(W - w)/2 + 10, y:(H - w/2)/2 - 4, w, h:w/2};
+    }
   } else {
     const w = Math.min(W - 700, (H - 230) * 2);
     mapRect = {x:(W - w)/2, y:(H - w/2)/2 + 6, w, h:w/2};
   }
+  positionWindLegend();
+  applyLandImm();
   renderMap(true);
   flowX.clearRect(0,0,W,H);
+}
+/* 风色标尺：钉在地图右下角，竖屏/横屏分别避让底部面板与状态栏 */
+function positionWindLegend(){
+  const wl = document.getElementById('windLegend');
+  if (!wl) return;
+  const lw = 116, lh = 54;
+  let lx = mapRect.x + mapRect.w - lw - 8;
+  let ly = mapRect.y + mapRect.h - lh - 6;
+  if (isPortrait) ly = Math.min(ly, document.getElementById('scroller').getBoundingClientRect().top - lh - 6);
+  if (isPhoneLand) ly = Math.min(ly, document.getElementById('statusbar').getBoundingClientRect().top - lh - 6);
+  wl.style.left = Math.round(Math.max(mapRect.x + 4, lx)) + 'px';
+  wl.style.top = Math.round(Math.max(mapRect.y + 4, ly)) + 'px';
+}
+let landImm = true;
+function applyLandImm(){
+  document.body.classList.toggle('land-imm', isPhoneLand && landImm);
+  const b = document.getElementById('landToggle');
+  if (b) b.textContent = landImm ? '☰ 面板' : '✕ 收起';
 }
 /* 手机竖屏：底部面板内容增长（数据到达、切页签）时重排地图，避免互相遮挡 */
 if (window.ResizeObserver) {
@@ -1194,6 +1241,8 @@ async function fetchQuakes(){
       .sort((a, b) => b.time - a.time);
     quakeAt = Date.now();
     setDot(quakeDot, true);
+    const bigQ = quakes.find(q => q.mag >= 6.5 && Date.now() - q.time < 6 * 3600e3);
+    if (bigQ) strongPush('quake', 'q' + bigQ.id, `M${bigQ.mag.toFixed(1)} strong quake · ${bigQ.place}`);
     quakeState.textContent = `${quakes.length} 次/24h`;
     markSource('quake', true);
     if (leftTab === 'quake') renderQuakeList();
@@ -1403,7 +1452,7 @@ function renderEventList(anim){
   }).join('');
   const cyclHtml = cyclones.length ? `<div class="exp">
       <div class="eh">🌀 活跃热带气旋 · NHC 公报实测</div>
-      <div class="ep">美国国家飓风中心每 6 小时发布公报；地图上的<b>虚线为历史路径</b>，旋转风眼大小代表强度。点击定位。</div>
+      <div class="ep">美国国家飓风中心每 6 小时发布公报；地图上<b>实线为近 48h 实测路径</b>，<b>虚线为 NHC 未来预报</b>，旋转风眼大小代表强度。点击定位。</div>
     </div>` + cyclones.map(c => `
     <div class="quake big" data-cycl="${escapeHtml(c.key)}">
       <div class="mag" style="color:#04060d;background:${cyclColor(c.cat)};border-color:${cyclColor(c.cat)}">${c.cat < 0 ? 'TD' : c.cat < 1 ? 'TS' : 'C' + c.cat}</div>
@@ -1434,7 +1483,7 @@ function switchTab(tab){
 }
 document.getElementById('quakePanel').addEventListener('click', e => {
   const t = e.target.closest('.tab[data-tab]');
-  if (t) switchTab(t.dataset.tab);
+  if (t){ tabDot(t.dataset.tab, false); switchTab(t.dataset.tab); }   // 用户亲自点开才消红点
 });
 
 /* ---------- 24h 回放控件 ---------- */
@@ -1642,6 +1691,26 @@ function cyclColor(cat){
 function cyclCatName(cat){
   return ['热带低压', '热带风暴', '一级飓风', '二级飓风', '三级飓风', '四级飓风', '五级飓风'][Math.min(6, Math.max(0, cat + 1))];
 }
+/* ---------- 强预警推送：大地震 / 强台风 → 对应 tab 弹到最前 + 红点提醒 ---------- */
+const strongSeen = new Set();
+let strongBoot = true;                       // 首屏已有数据不抢面板，仅记录
+function tabDot(tab, on){
+  const b = document.querySelector('#quakePanel .tab[data-tab="' + tab + '"]');
+  if (b) b.classList.toggle('dot', on);
+}
+function strongPush(tab, sig, msg){
+  if (strongSeen.has(sig)) return;
+  strongSeen.add(sig);
+  if (strongBoot) return;
+  const si = document.getElementById('searchInput');
+  if (si && si === document.activeElement){ tabDot(tab, true); return; }   // 正在搜索时只留红点不打断
+  if (leftTab !== tab){
+    tabDot(tab, true);                                                     // 红点保留到用户亲自点开该 tab
+    switchTab(tab);
+  }
+  toastOnce('strong-' + tab, msg);
+}
+setTimeout(() => { strongBoot = false; }, 10000);
 function parseAdv(p){
   const txt = p.productText || '';
   const m = txt.match(/(\d{1,2}(?:\.\d)?)([NS])\s+(\d{1,3}(?:\.\d)?)([EW])/);
@@ -1654,7 +1723,19 @@ function parseAdv(p){
   const nmM = txt.match(/(?:TROPICAL\s+)?(?:CYCLONE|STORM|HURRICANE|DEPRESSION)\s+([A-Z]{3,})\s+(?:ADVISORY|NUMBER|EYES|EYE)/i);
   const mvM = txt.match(/(?:MOVEMENT|MOVE\s+TO)\.\.\.\s*([A-Z]{2,3})/i);
   const cat = kt >= 137 ? 5 : kt >= 113 ? 4 : kt >= 96 ? 3 : kt >= 83 ? 2 : kt >= 64 ? 1 : kt >= 34 ? 0 : -1;
-  return { lat, lon, kt, cat, name: nmM ? nmM[1].replace(/\b\w/g, c => c.toUpperCase()) : '', mv: mvM ? mvM[1].toUpperCase() : '' };
+  /* 预报位置段："12H VT 2026-11-04 03:00:00Z 26.4N 73.9W 80 KT"，逐条抽成坐标 */
+  const fc = [];
+  const fre = /(\d{1,3})H\s+VT\s+\S+\s+\S+\s+(\d{1,2}(?:\.\d)?)([NS])\s+(\d{1,3}(?:\.\d)?)([EW])\s+(\d{2,3})\s*KT/g;
+  let fm;
+  while ((fm = fre.exec(txt))){
+    const fLat = +fm[2] * (fm[3] === 'S' ? -1 : 1);
+    const fLon = +fm[4] * (fm[5] === 'W' ? -1 : 1);
+    const fKt = +fm[6];
+    if (!Number.isFinite(fLat) || !Number.isFinite(fLon)) continue;
+    fc.push({ h: +fm[1], lat: fLat, lon: fLon, kt: fKt,
+      cat: fKt >= 137 ? 5 : fKt >= 113 ? 4 : fKt >= 96 ? 3 : fKt >= 83 ? 2 : fKt >= 64 ? 1 : fKt >= 34 ? 0 : -1 });
+  }
+  return { lat, lon, kt, cat, fc, name: nmM ? nmM[1].replace(/\b\w/g, c => c.toUpperCase()) : '', mv: mvM ? mvM[1].toUpperCase() : '' };
 }
 async function fetchCyclones(){
   if (cyclLoading) return;
@@ -1682,9 +1763,11 @@ async function fetchCyclones(){
       if (!last) return null;
       const b = key.replace(/\d+$/, '');
       const basin = /^(ATL|ATLANTIC)$/.test(b) ? '大西洋' : /^(EP|EASTERNPACIFIC|AL)$/.test(b) ? '东太平洋' : b;
-      return { key, basin, num: (key.match(/\d+$/) || [''])[0], name, mv, lat: last.lat, lon: last.lon, kt: last.kt, cat: last.cat, track, updated: ps[ps.length - 1].effectiveTime };
+      return { key, basin, num: (key.match(/\d+$/) || [''])[0], name, mv, lat: last.lat, lon: last.lon, kt: last.kt, cat: last.cat, fc: last.fc || [], track, updated: ps[ps.length - 1].effectiveTime };
     }).filter(Boolean);
     cyclAt = Date.now();
+    const bigC = cyclones.find(c => c.cat >= 3);
+    if (bigC) strongPush('event', 'c' + bigC.key + '|' + (bigC.updated || ''), `${bigC.name || ('TC' + bigC.num)} ${cyclCatName(bigC.cat)} strong cyclone · ${bigC.basin}`);
     if (leftTab === 'event') renderEventList(false);
   }catch(e){
     if (!cyclAt) cyclAt = -1;
@@ -2532,19 +2615,49 @@ function drawFX(t, dt){
     fxX.fillStyle = st.fg; fxX.fill();
   }
 
-  // 台风 / 飓风：历史路径虚线 + 旋转气旋眼 + 名称
+  // 台风 / 飓风：近 48h 实测实线 + 更早淡虚线 + NHC 预报虚线 + 旋转气旋眼 + 名称
   for (const c of cyclones){
+    const nowMs = Date.now();
     if (c.track.length > 1){
+      let started = false;
+      fxX.setLineDash([3, 5]);
+      fxX.strokeStyle = hexA(cyclColor(c.cat), 0.28);
+      fxX.lineWidth = 1.2;
       fxX.beginPath();
-      c.track.forEach((tp, i) => {
+      for (const tp of c.track){
+        if (nowMs - tp.ts <= 48 * 3600e3) continue;
         const X = px(tp.lon), Y = py(tp.lat);
-        i ? fxX.lineTo(X, Y) : fxX.moveTo(X, Y);
-      });
-      fxX.setLineDash([6, 4]);
-      fxX.strokeStyle = hexA(cyclColor(c.cat), 0.55);
-      fxX.lineWidth = 1.5;
+        started ? fxX.lineTo(X, Y) : (fxX.moveTo(X, Y), started = true);
+      }
+      fxX.stroke();
+      started = false;
+      fxX.setLineDash([]);
+      fxX.strokeStyle = hexA(cyclColor(c.cat), 0.85);
+      fxX.lineWidth = 2;
+      fxX.beginPath();
+      for (const tp of c.track){
+        if (nowMs - tp.ts > 48 * 3600e3) continue;
+        const X = px(tp.lon), Y = py(tp.lat);
+        started ? fxX.lineTo(X, Y) : (fxX.moveTo(X, Y), started = true);
+      }
+      fxX.stroke();
+    }
+    if (c.fc && c.fc.length){
+      fxX.setLineDash([5, 4]);
+      fxX.strokeStyle = hexA(cyclColor(c.cat), 0.6);
+      fxX.lineWidth = 1.4;
+      fxX.beginPath();
+      fxX.moveTo(px(c.lon), py(c.lat));
+      for (const fp of c.fc) fxX.lineTo(px(fp.lon), py(fp.lat));
       fxX.stroke();
       fxX.setLineDash([]);
+      for (const fp of c.fc){
+        fxX.beginPath();
+        fxX.arc(px(fp.lon), py(fp.lat), 2.4, 0, Math.PI * 2);
+        fxX.strokeStyle = hexA(cyclColor(fp.cat), 0.85);
+        fxX.lineWidth = 1.2;
+        fxX.stroke();
+      }
     }
     const cx = px(c.lon), cy = py(c.lat);
     const rot = t / 320;
@@ -2680,6 +2793,25 @@ function drawFX(t, dt){
     }
   }
 
+  // 橙/红高风险城市名称标注（与热门城市互补，共用防重叠）
+  fxX.font = '500 10px "Inter","PingFang SC",sans-serif';
+  for (const r of riskData){
+    if (r.level < 2) continue;
+    const hc = CITIES[r.cityIdx];
+    if (hc && hc.hot) continue;                       // 热门城市已标注
+    const rlx = px(r.lon), rly = py(r.lat);
+    if (rlx < mapRect.x - 20 || rlx > mapRect.x + mapRect.w + 20 || rly < mapRect.y - 20 || rly > mapRect.y + mapRect.h + 20) continue;
+    const tw = fxX.measureText(r.name).width;
+    const lx = rlx + 8, ly = rly + 8;
+    const overlap = labelRects.some(q => lx < q.x + q.w && lx + tw > q.x && ly - 5 < q.y + q.h && ly + 5 > q.y);
+    if (overlap) continue;
+    labelRects.push({x: lx, y: ly - 5, w: tw, h: 10});
+    fxX.fillStyle = hexA(RISK_COLORS[r.level], 0.95);
+    fxX.shadowColor = 'rgba(4,10,26,.95)'; fxX.shadowBlur = 5;
+    fxX.fillText(r.name, lx, ly);
+    fxX.shadowBlur = 0;
+  }
+
   // 聚焦标记（城市 / 震中）
   if (focus){
     const fsx = px(focus.lon), fsy = py(focus.lat);
@@ -2738,6 +2870,7 @@ function resetView(){ clearFocus(); flyTo(0, 0, 1); }
 document.getElementById('zin').addEventListener('click', () => flyTo(view.lon, view.lat, view.zoom * 1.6));
 document.getElementById('zout').addEventListener('click', () => flyTo(view.lon, view.lat, view.zoom / 1.6));
 document.getElementById('zrst').addEventListener('click', resetView);
+document.getElementById('landToggle').addEventListener('click', () => { landImm = !landImm; layout(); });
 
 /* ---------- 聚焦卡 24h 实况曲线（Open-Meteo 过去天气真实数据） ---------- */
 function sparkline(cv){
@@ -3074,6 +3207,37 @@ function cnLocalSearch(q){
   }
   return out;
 }
+/* 常用境外城市：中文名 → 英文检索词（open-meteo 对很多境外小城没有中文名，需按英文补查一次） */
+const FOREIGN_ALIAS = {
+  '东京':'Tokyo','大阪':'Osaka','京都':'Kyoto','札幌':'Sapporo','横滨':'Yokohama','名古屋':'Nagoya','福冈':'Fukuoka','那霸':'Naha','箱根':'Hakone','广岛':'Hiroshima','长崎':'Nagasaki','仙台':'Sendai','神户':'Kobe','奈良':'Nara','富士':'Fujiyoshida','镰仓':'Kamakura',
+  '首尔':'Seoul','釜山':'Busan','济州':'Jeju','仁川':'Incheon','大邱':'Daegu','光州':'Gwangju',
+  '曼谷':'Bangkok','清迈':'Chiang Mai','普吉':'Phuket','芭提雅':'Pattaya','苏梅':'Ko Samui','甲米':'Krabi','拜县':'Pai',
+  '新加坡':'Singapore','吉隆坡':'Kuala Lumpur','槟城':'George Town','亚庇':'Kota Kinabalu','兰卡威':'Langkawi',
+  '胡志明':'Ho Chi Minh City','河内':'Hanoi','岘港':'Da Nang','芽庄':'Nha Trang','富国':'Phu Quoc','会安':'Hoi An','沙巴':'Kota Kinabalu',
+  '马尼拉':'Manila','宿务':'Cebu','长滩':'Boracay','巴拉望':'Palawan','薄荷岛':'Tagbilaran',
+  '雅加达':'Jakarta','巴厘岛':'Denpasar','泗水':'Surabaya','日惹':'Yogyakarta','龙目':'Mataram',
+  '仰光':'Yangon','曼德勒':'Mandalay','蒲甘':'Bagan','琅勃拉邦':'Luang Prabang','万象':'Vientiane','金边':'Phnom Penh','暹粒':'Siem Reap',
+  '巴黎':'Paris','伦敦':'London','罗马':'Rome','米兰':'Milan','威尼斯':'Venice','佛罗伦萨':'Florence','那不勒斯':'Naples','比萨':'Pisa','五渔村':'Monterosso al Mare',
+  '巴塞罗那':'Barcelona','马德里':'Madrid','塞维利亚':'Seville','格拉纳达':'Granada','里斯本':'Lisbon','波尔图':'Porto','萨拉曼卡':'Salamanca',
+  '阿姆斯特丹':'Amsterdam','鹿特丹':'Rotterdam','海牙':'The Hague','柏林':'Berlin','慕尼黑':'Munich','汉堡':'Hamburg','法兰克福':'Frankfurt','海德堡':'Heidelberg',
+  '维也纳':'Vienna','萨尔茨堡':'Salzburg','布拉格':'Prague','布达佩斯':'Budapest','华沙':'Warsaw','克拉科夫':'Krakow','日内瓦':'Geneva','苏黎世':'Zurich','卢塞恩':'Lucerne','因特拉肯':'Interlaken',
+  '雅典':'Athens','圣托里尼':'Thira','都柏林':'Dublin','爱丁堡':'Edinburgh','曼彻斯特':'Manchester','布鲁塞尔':'Brussels','哥本哈根':'Copenhagen','奥斯陆':'Oslo','斯德哥尔摩':'Stockholm','赫尔辛基':'Helsinki','雷克雅未克':'Reykjavik',
+  '莫斯科':'Moscow','圣彼得堡':'Saint Petersburg','基辅':'Kyiv','明斯克':'Minsk',
+  '伊斯坦布尔':'Istanbul','卡帕多奇亚':'Nevsehir','安塔利亚':'Antalya','以弗所':'Selcuk',
+  '迪拜':'Dubai','阿布扎比':'Abu Dhabi','多哈':'Doha','利雅得':'Riyadh','吉达':'Jeddah','麦加':'Mecca','德黑兰':'Tehran','特拉维夫':'Tel Aviv','耶路撒冷':'Jerusalem','安曼':'Amman','佩特拉':'Wadi Musa','贝鲁特':'Beirut',
+  '开罗':'Cairo','亚历山大':'Alexandria','卢克索':'Luxor','阿斯旺':'Aswan','马拉喀什':'Marrakesh','卡萨布兰卡':'Casablanca','突尼斯':'Tunis','费斯':'Fes',
+  '开普敦':'Cape Town','约翰内斯堡':'Johannesburg','内罗毕':'Nairobi','拉各斯':'Lagos','卡托维兹':'Katowice','阿鲁沙':'Arusha',
+  '孟买':'Mumbai','新德里':'New Delhi','德里':'Delhi','斋普尔':'Jaipur','加尔各答':'Kolkata','果阿':'Panaji','瓦拉纳西':'Varanasi','阿格拉':'Agra','加德满都':'Kathmandu','博卡拉':'Pokhara','科伦坡':'Colombo','马累':'Male','哈瓦那':'Havana',
+  '悉尼':'Sydney','墨尔本':'Melbourne','布里斯班':'Brisbane','珀斯':'Perth','阿德莱德':'Adelaide','堪培拉':'Canberra','奥克兰':'Auckland','皇后镇':'Queenstown','基督城':'Christchurch','惠灵顿':'Wellington','楠迪':'Nadi','罗托鲁瓦':'Rotorua',
+  '纽约':'New York','洛杉矶':'Los Angeles','旧金山':'San Francisco','拉斯维加斯':'Las Vegas','华盛顿':'Washington','芝加哥':'Chicago','波士顿':'Boston','西雅图':'Seattle','迈阿密':'Miami','奥兰多':'Orlando','檀香山':'Honolulu','火奴鲁鲁':'Honolulu','安克雷奇':'Anchorage','新奥尔良':'New Orleans','圣迭戈':'San Diego','盐湖城':'Salt Lake City','黄石':'Yellowstone','亚特兰大':'Atlanta','休斯顿':'Houston','费城':'Philadelphia','夏威夷':'Honolulu',
+  '温哥华':'Vancouver','多伦多':'Toronto','蒙特利尔':'Montreal','渥太华':'Ottawa','卡尔加里':'Calgary','班夫':'Banff','魁北克':'Quebec','埃德蒙顿':'Edmonton',
+  '墨西哥城':'Mexico City','坎昆':'Cancun','瓜达拉哈拉':'Guadalajara','洛斯卡沃斯':'Cabo San Lucas',
+  '利马':'Lima','库斯科':'Cusco','圣地亚哥':'Santiago','布宜诺斯艾利斯':'Buenos Aires','里约':'Rio de Janeiro','里约热内卢':'Rio de Janeiro','圣保罗':'Sao Paulo','蒙得维的亚':'Montevideo','基多':'Quito','加拉加斯':'Caracas','麦德林':'Medellin','卡塔赫纳':'Cartagena'
+};
+function foreignAlias(q){
+  const s = q.trim();
+  return FOREIGN_ALIAS[s] || FOREIGN_ALIAS[s.replace(/(市|岛|省|特别行政区)$/, '')] || null;
+}
 async function doSearch(q){
   const seq = ++searchSeq;
   const local = cnLocalSearch(q);
@@ -3086,7 +3250,7 @@ async function doSearch(q){
     }
     searchList = list.slice(0, 10);
     if (!searchList.length){
-      searchResults.innerHTML = '<div class="sres empty">未找到 · 中国已覆盖全部省市县，境外可试英文名</div>';
+      searchResults.innerHTML = '<div class="sres empty">未找到 · 中国省市县已全覆盖，境外可试常用中文名或英文名</div>';
     } else {
       searchResults.innerHTML = searchList.map((r, i) => `
         <div class="sres" data-i="${i}"${r._synthetic ? ' data-cn="1"' : ''}>
@@ -3097,11 +3261,25 @@ async function doSearch(q){
     showResults();
   };
   render([]);  // 中国本地结果先瞬时展示，不等网络
+  const geoUrl = n => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(n)}&count=12&language=zh&format=json`;
+  const jobs = [getJson(geoUrl(q), {timeout: 7000, tries: 1}).catch(() => null)];
+  const aliasEn = foreignAlias(q);
+  if (aliasEn) jobs.push(getJson(geoUrl(aliasEn), {timeout: 7000, tries: 1}).catch(() => null));  // 中文搜境外：按英文常用名补查
   try{
-    const data = await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=12&language=zh&format=json`, {timeout: 7000, tries: 1});
+    const res = await Promise.all(jobs);
     if (seq !== searchSeq) return;
-    const api = (data.results || []).sort((a, b) => (b.population || 0) - (a.population || 0));
-    render(api);
+    const merged = [];
+    const seen = new Set();
+    for (const data of res){
+      const arr = ((data && data.results) || []).sort((a, b) => (b.population || 0) - (a.population || 0));
+      for (const r of arr){
+        const k = r.id != null ? 'i' + r.id : (r.latitude || 0).toFixed(3) + ',' + (r.longitude || 0).toFixed(3);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(r);
+      }
+    }
+    render(merged.slice(0, 12));
   }catch(e){
     if (seq !== searchSeq) return;
     if (!local.length) toastOnce('search', '境外城市搜索暂不可用 · 中国城市仍可查');
