@@ -54,6 +54,13 @@
       radial-gradient(110% 80% at 100% 100%, rgba(180,110,255,.12), transparent 55%)}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
   #map{z-index:1}#flow{z-index:2}#fx{z-index:3}
+  #zoomCtl{position:fixed;left:10px;top:44%;transform:translateY(-50%);z-index:6;display:flex;flex-direction:column;gap:8px}
+  #zoomCtl button{width:38px;height:38px;border-radius:12px;border:1px solid rgba(140,180,255,.25);
+    background:rgba(10,18,38,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    color:#cfe2ff;font-size:19px;line-height:1;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:background .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  #zoomCtl button:active{background:rgba(80,130,220,.45)}
+  #zoomCtl .zr{font-size:15px}
 
   .panel{
     position:fixed;z-index:10;
@@ -528,6 +535,11 @@
   </div>
 </div>
 
+<div id="zoomCtl" aria-label="地图缩放">
+  <button id="zin" title="放大">＋</button>
+  <button id="zout" title="缩小">－</button>
+  <button id="zrst" class="zr" title="复位">⟳</button>
+</div>
 <div id="statusbar" class="panel">
   <div class="grp">
     <span class="chip"><span class="d" id="windDot"></span>风场 <b id="windState">连接中</b>
@@ -597,7 +609,7 @@
 <script>
 'use strict';
 /* 构建版本号：每次发布手动+1，用于内置浏览器的"自动换新"检测 */
-const BUILD = 'ep-2026.11.03-6';
+const BUILD = 'ep-2026.11.03-7';
 
 /* ---------- 安全区实测封顶 ----------
    部分 App 内置浏览器会虚报 env(safe-area-inset-*)，导致顶部出现大片空白。
@@ -1083,7 +1095,7 @@ function particleCount(){
   const area = W * H;
   const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const q = qLevel === 3 ? 0.22 : qLevel === 2 ? 0.62 : qLevel === 1 ? 0.8 : 1;
-  return Math.round(Math.min(6500, Math.max(2000, area / 220)) * q * (reduced ? 0.35 : 1));
+  return Math.round(Math.min(6500, Math.max(2200, area / 195)) * q * (reduced ? 0.35 : 1));
 }
 function visiblePoint(){
   const halfLon = 180 / view.zoom, halfLat = 90 / view.zoom;
@@ -1127,9 +1139,9 @@ function stepParticles(dt){
         sy0 > mapRect.y - 40 && sy0 < mapRect.y + mapRect.h + 40){
       const t = Math.min(1, speed / 26);
       const hue = 190 + t * 210;   // 青 → 紫 → 金（与图例一致）
-      const lum = 58 + t * 28;
-      flowX.strokeStyle = `hsla(${hue},100%,${lum}%,${0.17 + t * 0.52})`;
-      flowX.lineWidth = 0.9 + t * 1.9;
+      const lum = 62 + t * 26;
+      flowX.strokeStyle = `hsla(${hue},100%,${lum}%,${0.26 + t * 0.58})`;
+      flowX.lineWidth = 1.15 + t * 2.5;
       flowX.beginPath(); flowX.moveTo(sx0, sy0); flowX.lineTo(sx1, sy1); flowX.stroke();
     }
     p.lon = ((nlon + 180) % 360 + 360) % 360 - 180;
@@ -1144,7 +1156,7 @@ function stepParticles(dt){
   flowX.restore();
   // 拖尾衰减（只擦地图区域，比全屏擦除省一个数量级的像素）
   flowX.globalCompositeOperation = 'destination-out';
-  flowX.fillStyle = 'rgba(0,0,0,0.085)';
+  flowX.fillStyle = 'rgba(0,0,0,0.055)';
   flowX.fillRect(mapRect.x - 44, mapRect.y - 44, mapRect.w + 88, mapRect.h + 88);
   flowX.globalCompositeOperation = 'source-over';
 }
@@ -2723,6 +2735,9 @@ function clearFocus(){
   document.querySelectorAll('.quake.sel').forEach(el => el.classList.remove('sel'));
 }
 function resetView(){ clearFocus(); flyTo(0, 0, 1); }
+document.getElementById('zin').addEventListener('click', () => flyTo(view.lon, view.lat, view.zoom * 1.6));
+document.getElementById('zout').addEventListener('click', () => flyTo(view.lon, view.lat, view.zoom / 1.6));
+document.getElementById('zrst').addEventListener('click', resetView);
 
 /* ---------- 聚焦卡 24h 实况曲线（Open-Meteo 过去天气真实数据） ---------- */
 function sparkline(cv){
